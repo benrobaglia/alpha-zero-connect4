@@ -1,54 +1,33 @@
 import numpy as np
 from itertools import groupby, chain
 import matplotlib.pyplot as plt 
+from copy import deepcopy
 
 class Connect4:
-    def __init__(self, verbose=False):
-        self.init_state = np.zeros([6,7]).astype(str)
-        self.init_state[self.init_state == '0.0'] = " "
-        self.turn = 0
-        self.current_state = self.init_state
+    def __init__(self):
+        self.init_state = np.zeros([6,7])
         self.name = 'connect4'
-        self.done = False
-        self.winner = " "
-        self.verbose = verbose
 
-    def step(self, action):
-        player = self.get_player_turn()
-        if self.current_state[0, action] != " ": # The column must not be full !
-            print("Impossible action")
+    def step(self, action, board, player_turn):
+        new_board = deepcopy(board)
+        if new_board[0, action] != 0.: # The column must not be full !
+            return "Impossible action"
         else:
             for i in reversed(range(6)):
-                if self.current_state[i, action] == " ":
+                if new_board[i, action] == 0.:
                     pos = i
                     break
-                
-                self.current_state[pos, action] = self.players[player]
+            new_board[pos, action] = player_turn
 
-            self.winner = self.check_winner()
-            if self.check_full() & (self.winner == ' '):
-                self.winner =  'draw'
-                self.done = True
-
-            if self.winner != ' ':
-                return self.winner
-                self.done = True
-
-            self.turn += 1
-
-            if self.verbose:
-                return self.current_state, self.players[self.get_player_turn()]
+        return new_board, - player_turn        
         
         
-        
-    def check_full(self):
-        if ' ' not in self.current_state:
+    def check_full(self, board):
+        if 0 not in board:
             return True
         else:
             return False
         
-    def get_player_turn(self):
-        return self.turn % 2
         
     def get_pos_diagonals (self, matrix):
         for di in ([(j, i - j) for j in range(6)] for i in range(6 + 7 -1)):
@@ -59,51 +38,38 @@ class Connect4:
             yield [matrix[i][j] for i, j in di if i >= 0 and j >= 0 and i < 6 and j < 7]
 
         
-    def check_winner(self): 
+    def check_winner(self, board): 
         lines = (
-            self.current_state, # columns
-            zip(*self.current_state), # rows
-            self.get_pos_diagonals(self.current_state), # positive diagonals
-            self.get_neg_diagonals(self.current_state) # negative diagonals
+            board, # columns
+            zip(*board), # rows
+            self.get_pos_diagonals(board), # positive diagonals
+            self.get_neg_diagonals(board) # negative diagonals
         )
 
         for line in chain(*lines):
             for color, group in groupby(line):
-                if color != ' ' and len(list(group)) >= 4:
+                if color != 0 and len(list(group)) >= 4:
                     return color
-        return ' '
-
-    
         
-    def reset(self):
-        self.init_state = np.zeros([6,7]).astype(str)
-        self.init_state[self.init_state == '0.0'] = " "
-    #             self.player = 0 # Tells us which turn it is to play
-        self.turn = 0
-        self.current_state = self.init_state
+        if self.check_full(board):
+            return 2 # It's a draw
+        else:
+            return 0 # Game has not ended
 
-    def allowed_actions(self):
+    def get_canonical_form(self, board, player):
+        return board * player
+
+
+    def allowed_actions(self, board):
         acts = []
         for col in range(7):
-            if self.current_state[0, col] == " ":
+            if board[0, col] == 0:
                 acts.append(col)
         return acts
 
-    def render(self):
+    def render(self, board):
         print(' |'.join(map(str, range(7))))
-        for r in self.current_state:
-            print(' |'.join(r))
+        for r in board:
+            print(' |'.join(str(r)))
     
 
-    def to_canonical(self):
-        if self.get_player_turn() == 0:
-            pass
-        else:
-            self.turn += 1 # To fool get player turn 
-            if self.winner == '0':
-                self.winner = "X"
-            elif self.winner == "X":
-                self.winner = "0"
-            self.current_state = np.where(self.current_state=="0", "00", self.current_state)
-            self.current_state = np.where(self.current_state=="X", "0", self.current_state)
-            self.current_state = np.where(self.current_state=="00", "0X", self.current_state)
