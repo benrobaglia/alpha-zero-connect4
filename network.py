@@ -5,6 +5,7 @@ import numpy as np
 
 class board_data(Dataset):
     def __init__(self, dataset): # dataset = np.array of (s, p, v)
+        dataset = np.array(dataset)
         self.X = dataset[:,0]
         self.y_p, self.y_v = dataset[:,1], dataset[:,2]
     
