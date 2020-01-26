@@ -68,8 +68,6 @@ class Connect4:
         return acts
 
     def render(self, board):
-        print(' |'.join(map(str, range(7))))
-        for r in board:
-            print(' |'.join(str(r)))
+        print(board)
     
 
