@@ -1,5 +1,4 @@
 import numpy as np
-from encode import encode_board
 import torch
 
 epsilon=1e-7
@@ -22,7 +21,7 @@ class MCTS:
         self.Vs = {}        # valid actions for board s
 
     def run_sims(self, board, temp=1.):
-        for i in range(self.args['n_sim']):
+        for _ in range(self.args['n_sim']):
             self.search(board)
 
         s = str(board)
@@ -56,8 +55,8 @@ class MCTS:
         # The game has not ended (not a leaf node)
         if s not in self.Ps: # No inference has been made on that node. We need to get the priors
             # leaf node
-            self.Ps[s], v = self.net(torch.tensor(encode_board(board)).float().unsqueeze(0))
-            self.Ps[s], v = self.Ps[s].detach().squeeze().numpy(), v.detach().squeeze().numpy()
+            self.Ps[s], v = self.net(torch.tensor(board).float().to(self.args['device']))
+            self.Ps[s], v = self.Ps[s].detach().squeeze().cpu().numpy(), v.detach().squeeze().cpu().numpy()
             valids = np.array([1 if i in self.game.allowed_actions(board) else 0 for i in range(7) ])
             self.Ps[s] = self.Ps[s] * valids      # masking invalid moves
             sum_Ps_s = np.sum(self.Ps[s])

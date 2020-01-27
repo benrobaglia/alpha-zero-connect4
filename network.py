@@ -19,11 +19,11 @@ class ConvBlock(nn.Module):
     def __init__(self):
         super(ConvBlock, self).__init__()
         self.action_size = 7
-        self.conv1 = nn.Conv2d(3, 128, 3, stride=1, padding=1)
+        self.conv1 = nn.Conv2d(1, 128, 3, stride=1, padding=1)
         self.bn1 = nn.BatchNorm2d(128)
 
     def forward(self, s):
-        s = s.view(-1, 3, 6, 7) 
+        s = s.view(-1, 1, 6, 7) 
         s = torch.relu(self.bn1(self.conv1(s)))
         return s
 
@@ -50,9 +50,9 @@ class ResBlock(nn.Module):
 class OutBlock(nn.Module):
     def __init__(self):
         super(OutBlock, self).__init__()
-        self.conv = nn.Conv2d(128, 3, kernel_size=1) # value head
-        self.bn = nn.BatchNorm2d(3)
-        self.fc1 = nn.Linear(3*6*7, 32)
+        self.conv = nn.Conv2d(128, 1, kernel_size=1) # value head
+        self.bn = nn.BatchNorm2d(1)
+        self.fc1 = nn.Linear(6*7, 32)
         self.fc2 = nn.Linear(32, 1)
         
         self.conv1 = nn.Conv2d(128, 32, kernel_size=1) # policy head
@@ -62,7 +62,7 @@ class OutBlock(nn.Module):
     
     def forward(self,s):
         v = torch.relu(self.bn(self.conv(s))) # value head
-        v = v.view(-1, 3*6*7)  # batch_size X channel X height X width
+        v = v.view(-1, 6*7)  # batch_size X channel X height X width
         v = torch.relu(self.fc1(v))
         v = torch.tanh(self.fc2(v))
         
@@ -78,7 +78,7 @@ class ConnectNet(nn.Module):
         self.conv = ConvBlock()
         self.n_blocks = n_blocks
         for block in range(self.n_blocks):
-            setattr(self, "res_%i" % block,ResBlock())
+            setattr(self, "res_%i" % block, ResBlock())
         self.outblock = OutBlock()
     
     def forward(self,s):
@@ -94,7 +94,7 @@ class AlphaLoss(torch.nn.Module):
         super(AlphaLoss, self).__init__()
 
     def forward(self, y_value, value, y_policy, policy):
-        value_error = (value - y_value) ** 2
+        value_error = (value.squeeze() - y_value.squeeze()) ** 2
         policy_error = torch.sum((-policy* 
                                 (1e-8 + y_policy.float()).float().log()), 1)
         total_error = (value_error.view(-1).float() + policy_error).mean()
