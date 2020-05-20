@@ -115,8 +115,8 @@ class SelfPlay:
 
                 print(f"Not trained net wins {w_not_trained} times, Trained net wins {w_trained}, {draws} draws.")
                 if p_accept > self.args['update_threshold']:
-                    torch.save(self.net.state_dict(), self.args['save_path'] + "best_net.pth")
-                    print(f"Iteration {i} Model accepted !")
+                    torch.save(self.net.state_dict(), f"{self.args['save_path']}best_net_iteration_{i}.pth")
+                    print("Model accepted !")
                 # else:
                     self.net.load_state_dict(self.not_trained_net.state_dict())
 
