@@ -7,11 +7,11 @@ from arena import Arena
 from self_play_learning import SelfPlay
 
 
-args = {"tempThreshold":15,
+args = {"stochasticThreshold":15,
         "num_iterations":10000,
-        "num_episodes":100,
+        "num_episodes":500,
         "max_train_examples_history":200000,
-        "batch_size":64,
+        "batch_size":256,
         "n_challenges":50,
         "update_threshold":0.7,
         "save_path": "results/",

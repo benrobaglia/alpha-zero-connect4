@@ -12,36 +12,41 @@ class MCTS:
         self.game = game
         self.net = net
         self.args = args
-        self.Qsa = {}       # Q values
-        self.Nsa = {}       # number of times edge s,a was visited
-        self.Ns = {}        # # number of times board s was visited
+        self.Qsa = {}       # Q values for state s and action a
+        self.Nsa = {}       # number of times s,a was visited
+        self.Ns = {}        # number of times board s was visited
         self.Ps = {}        # initial policy
 
-        self.Es = {}        # game status for board s
+        self.Es = {}        # game status for board s (winner, not ended, etc.)
         self.Vs = {}        # valid actions for board s
 
-    def run_sims(self, board, temp=1.):
+    def run_sims(self, board, stochastic=1.):
+        """
+        Board : cannonical board : 6x7 matrix. Player 1 to play
+        Stochastic: bool = 1 if we have a stochastic policy
+        """
         for _ in range(self.args['n_sim']):
-            self.search(board)
+            self.search(board) # Run n_sim searches
 
         s = str(board)
         counts = [self.Nsa[(s,a)] if (s,a) in self.Nsa else 0 for a in range(7)]
 
-        if temp == 0.:
+        if stochastic == 0.:
             best_action = np.argmax(counts)
             policy = [0]*len(counts)
             policy[best_action] = 1
             return policy
 
-        counts = [x**(1./temp) for x in counts]
-        counts_sum = np.sum(counts)
-        policy = [x/counts_sum for x in counts]
-        return policy
+        else:
+            counts = [x for x in counts]
+            counts_sum = np.sum(counts)
+            policy = [x/counts_sum for x in counts]
+            return policy
 
     def search(self, board):
         s = str(board)
 
-        if s not in self.Es:
+        if s not in self.Es: # If the state has never been seen in the tree
             outcome = self.game.check_winner(board) 
             if outcome == 2:
                 self.Es[s] = 1e-4
@@ -64,7 +69,8 @@ class MCTS:
                 self.Ps[s] /= sum_Ps_s    # renormalize
             else:
                 print("All valid moves were masked.")
-                self.Ps[s] = self.Ps[s] + valids
+                # We choose uniformely a move among the valid moves.
+                self.Ps[s] += valids
                 self.Ps[s] /= np.sum(self.Ps[s])
 
             self.Vs[s] = valids
@@ -83,7 +89,7 @@ class MCTS:
                 if (s,a) in self.Qsa:
                     u = self.Qsa[(s,a)] + self.args['exploration_constant']*self.Ps[s][a]*np.sqrt(self.Ns[s])/(1+self.Nsa[(s,a)])
                 else:
-                    u = self.args['exploration_constant']*self.Ps[s][a]*np.sqrt(self.Ns[s] + epsilon)     # Q = 0 ?
+                    u = self.args['exploration_constant']*self.Ps[s][a]*np.sqrt(self.Ns[s] + epsilon)
 
                 if u > cur_best:
                     cur_best = u

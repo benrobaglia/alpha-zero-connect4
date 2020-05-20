@@ -33,8 +33,8 @@ class SelfPlay:
         while True:
             episode_step += 1
             canonical_board = self.game.get_canonical_form(board, self.player_turn)
-            temp = int(episode_step < self.args['tempThreshold'])
-            pi = self.mcts.run_sims(canonical_board, temp=temp)
+            stochastic = int(episode_step < self.args['stochasticThreshold'])
+            pi = self.mcts.run_sims(canonical_board, stochastic=stochastic)
             train_examples.append([board, self.player_turn, pi, None])
             action = np.random.choice(len(pi), p=pi)
             board, self.player_turn = self.game.step(action, board, self.player_turn)
@@ -98,8 +98,8 @@ class SelfPlay:
                 print('Start evaluation...')
 
                 arena = Arena(
-                    lambda x: np.argmax(not_trained_mcts.run_sims(x, temp=0.)),
-                    lambda x: np.argmax(trained_mcts.run_sims(x, temp=0.)),
+                    lambda x: np.argmax(not_trained_mcts.run_sims(x, stochastic=0.)),
+                    lambda x: np.argmax(trained_mcts.run_sims(x, stochastic=0.)),
                     self.game
                 )
 
