@@ -3,13 +3,13 @@ from tqdm import tqdm
 
 class Arena:
 
-    def __init__(self, player1, player2, game):
+    def __init__(self, mcts1, mcts2, game):
         """ Player 1 begins """
         self.player1 = player1
         self.player2 = player2
         self.game = game
 
-    def play_game(self, verbose=False, start=1): # start = {-1, 1}
+    def play_game(self, verbose=False, start=1, store_game=False): # start = {-1, 1}
         self.players = {int(start):self.player1, int(-1*start):self.player2}
         curPlayer = 1
         board = self.game.init_state
