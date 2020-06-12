@@ -8,13 +8,13 @@ import torch
 
 class SelfPlay:
 
-    def __init__(self, game, net, args):
+    def __init__(self, game, net, args, train_examples_history=[]):
         self.game = game
         self.args = args
         self.net = net.to(self.args['device'])
         self.not_trained_net = net.__class__(net.n_blocks).to(self.args['device'])
         self.optimizer = torch.optim.Adam(self.net.parameters(), lr=0.001)
-        self.train_examples_history = [] # List of list of one iteration
+        self.train_examples_history = train_examples_history # List of list of one iteration
         self.history_loss = []
         self.criterion = AlphaLoss()
 
