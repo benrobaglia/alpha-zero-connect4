@@ -164,9 +164,12 @@ class SelfPlay:
             mcts2.set_root(board)
             
             if player_turn == 1:
-                pi = mcts1.get_action_probs(tau=0.01) 
+                pi,_ = mcts1.get_action_probs(tau=0.01) 
             else:    
-                pi = mcts2.get_action_probs(tau=0.01) 
+                pi, _ = mcts2.get_action_probs(tau=0.01) 
+            
+            if len(pi) > 7:
+                print(pi)
 
             action = np.argmax(pi)
             board, player_turn = self.game.step(action, board, player_turn)
@@ -175,7 +178,6 @@ class SelfPlay:
         
 
         return winner
-        
 
 
     def save_train_examples_history(self, iteration):
