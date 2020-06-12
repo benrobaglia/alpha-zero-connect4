@@ -127,7 +127,7 @@ class MCTS:
         self.backup(leaf, value, branch)
     
     def get_action_probs(self, tau):
-        for s in range(self.args['n_sim']):
+        for _ in range(self.args['n_sim']):
             self.search()
         edges = self.root.edges
         pi = [0.] * 7
@@ -140,7 +140,7 @@ class MCTS:
             
             values[edge.action] = edge.Q
         pi = np.array(pi)
-        
+
         if np.sum(pi) != 0:
             pi /= np.sum(pi)
         else:
@@ -148,6 +148,14 @@ class MCTS:
             pi[a] = 1
         return pi, values
     
-    def set_root(self, node_id):
-        self.root = self.tree[node_id]
+    def set_root(self, node):
+        if str(node) in self.tree.keys():
+            self.root = self.tree[str(node)]
+        else:
+            if node.sum() == 0:
+                turn = 1
+            else:
+                turn = -1
+            self.root = Node(node, turn)
+            self.tree[str(self.root)] = self.root
 

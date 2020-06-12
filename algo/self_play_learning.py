@@ -4,7 +4,6 @@ from tqdm import tqdm
 from network import AlphaLoss, board_data
 import pickle
 from torch.utils.data import TensorDataset, DataLoader
-from arena import Arena
 import torch
 
 class SelfPlay:
@@ -37,7 +36,7 @@ class SelfPlay:
             train_examples.append([board, self.player_turn, pi, None])
             action = np.random.choice(len(pi), p=pi)
             board, self.player_turn = self.game.step(action, board, self.player_turn)
-            mcts.set_root(str(board))
+            mcts.set_root(board)
 
             winner = self.game.check_winner(board)
 
@@ -96,24 +95,36 @@ class SelfPlay:
 
 
                 print('Start evaluation...')
+                stats = {"trained_wins":0, "draws":0, "not_trained_wins":0}
 
-                arena = Arena(
-                    trained_mcts,
-                    not_trained_mcts,
-                    self.game
-                )
+                # Trained starts
+                for _ in tqdm(range(self.args['n_challenges']//2)):
+                    outcome = self.play_game(trained_mcts, not_trained_mcts)
+                    if outcome == 1:
+                        stats['trained_wins'] += 1
+                    elif outcome == 2:
+                        stats['draws'] += 1
+                    else:
+                        stats['not_trained_wins'] += 1
 
-                stats = arena.evaluate(self.args['n_challenges'])   
-                w_not_trained, draws, w_trained = stats['one_won'], stats['draws'], stats['two_won']
+                # Not trained starts
+                for _ in tqdm(range(self.args['n_challenges']//2)):
+                    outcome = self.play_game(not_trained_mcts, trained_mcts)
+                    if outcome == -1:
+                        stats['trained_wins'] += 1
+                    elif outcome == 2:
+                        stats['draws'] += 1
+                    else:
+                        stats['not_trained_wins'] += 1
 
                 # Accepting or rejecting the model
-                if w_not_trained + w_trained != 0:
-                    p_accept = w_trained / (w_not_trained + w_trained)
+                if stats['not_trained_wins'] + stats['trained_wins'] != 0:
+                    p_accept = stats['trained_wins'] / (stats['not_trained_wins'] + stats['trained_wins'])
                 else:
                     p_accept = 0
                 print("pourcentage trained wins : ", p_accept)
 
-                print(f"Not trained net wins {w_not_trained} times, Trained net wins {w_trained}, {draws} draws.")
+                print(f"Not trained net wins {stats['not_trained_wins']} times, Trained net wins {stats['trained_wins']}, {stats['draws']} draws.")
                 if p_accept > self.args['update_threshold']:
                     torch.save(self.net.state_dict(), f"{self.args['save_path']}best_net_iteration_{i}.pth")
                     print("Model accepted !")
@@ -137,19 +148,24 @@ class SelfPlay:
         self.optimizer.step()
         return loss.item()
 
-    def play_game(self, mcts1, mcts2):
+    def play_game(self, mcts1, mcts2, verbose=False):
         board = self.game.init_state
         player_turn = 1
         episode_step = 0
         winner = 0
 
         while winner == 0:
+            if verbose:
+                print("Episode step:", episode_step)
+                print(board)
+
             episode_step += 1
+            mcts1.set_root(board)
+            mcts2.set_root(board)
+            
             if player_turn == 1:
-                mcts1.set_root(str(board))
                 pi = mcts1.get_action_probs(tau=0.01) 
-            else:
-                mcts2.set_root(str(board))
+            else:    
                 pi = mcts2.get_action_probs(tau=0.01) 
 
             action = np.argmax(pi)
@@ -157,12 +173,13 @@ class SelfPlay:
 
             winner = self.game.check_winner(board)
         
+
         return winner
         
 
 
     def save_train_examples_history(self, iteration):
-        pickle.dump(self.train_examples_history, open(self.args['save_path'] + "train_samples_iteration_" +str(iteration) + ".p", "wb"))
+        pickle.dump(self.train_examples_history, open(self.args['save_path'] + "train_samples_iteration.p", "wb"))
 
 
 
