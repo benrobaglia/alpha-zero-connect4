@@ -1,116 +1,161 @@
 import numpy as np
 import torch
 
-epsilon=1e-7
+class Node:
+    def __init__(self, state, turn):
+        self.id = str(state)
+        self.state = state
+        self.turn = turn
+        self.edges = []
+        
+    def is_leaf(self):
+        return len(self.edges) == 0
+    
+class Edge:
+    def __init__(self, parent, child, prior, action):
+        self.id = (parent.id, str(action))
+        self.parent = parent
+        self.child = child
+        self.turn = parent.turn
+        self.action = action
+        
+        self.N = 0
+        self.W = 0
+        self.Q = 0
+        self.P = prior
+
 
 class MCTS:
-    """
-    Monte Carlo Tree search algorithm
-    """
-
-    def __init__(self, game, net, args):
+    def __init__(self, root, turn, game, net, args):
+        self.root = Node(root, turn)
         self.game = game
         self.net = net
         self.args = args
-        self.Qsa = {}       # Q values for state s and action a
-        self.Nsa = {}       # number of times s,a was visited
-        self.Ns = {}        # number of times board s was visited
-        self.Ps = {}        # initial policy
+        self.tree = {}
+        self.tree[str(root)] = self.root
+        
+    
+    def select_leaf(self):
+        branch = []
+        current_node = self.root
+        
+        while current_node.is_leaf() == False:
+            best_qu = -np.inf
+            best_edge = None
 
-        self.Es = {}        # game status for board s (winner, not ended, etc.)
-        self.Vs = {}        # valid actions for board s
+            Nb = 0
+            for edge in current_node.edges:
+                Nb += edge.N
+            
+            if Nb == 0:
+                Nb += 1
+            
+            # Adding dirichlet noise to the root node for exploration
+            if current_node == self.root:
+                nu = np.random.dirichlet([self.args['alpha']] * len(current_node.edges))
+                epsilon = self.args['epsilon']
+                
+            else:
+                epsilon = 0
+                nu = [0] * len(current_node.edges)
 
-    def run_sims(self, board, stochastic=1.):
-        """
-        Board : cannonical board : 6x7 matrix. Player 1 to play
-        Stochastic: bool = 1 if we have a stochastic policy
-        """
-        for _ in range(self.args['n_sim']):
-            self.search(board) # Run n_sim searches
-
-        s = str(board)
-        counts = [self.Nsa[(s,a)] if (s,a) in self.Nsa else 0 for a in range(7)]
-
-        if stochastic == 0.:
-            best_action = np.argmax(counts)
-            policy = [0]*len(counts)
-            policy[best_action] = 1
-            return policy
-
+            # select the next node
+            for i, edge in enumerate(current_node.edges):
+                u = self.args['cpuct'] * ((1-epsilon) * edge.P + epsilon * nu[i]) * np.sqrt(Nb) / (1 + edge.N)
+                q = edge.Q
+            
+                if q + u > best_qu:
+                    best_qu = q + u
+                    best_edge = edge
+#                print(i,"q" , q, "u", u, "Nb", Nb)
+                
+            branch.append(best_edge)
+            current_node = best_edge.child
+        
+        winner = self.game.check_winner(current_node.state)
+        
+        return current_node, winner, branch
+    
+    def expand_evaluate(self, leaf, winner):
+        if winner == 1:
+            return 1.
+        elif winner == -1:
+            return -1.
+        elif winner == 2:
+            return 1e-4
         else:
-            counts = [x for x in counts]
-            counts_sum = np.sum(counts)
-            policy = [x/counts_sum for x in counts]
-            return policy
-
-    def search(self, board):
-        s = str(board)
-
-        if s not in self.Es: # If the state has never been seen in the tree
-            outcome = self.game.check_winner(board) 
-            if outcome == 2:
-                self.Es[s] = 1e-4
-            else:
-                self.Es[s] = outcome
-
-        if self.Es[s] != 0:
-            return -self.Es[s]
-
-
-        # The game has not ended (not a leaf node)
-        if s not in self.Ps: # No inference has been made on that node. We need to get the priors
-            # leaf node
-            self.Ps[s], v = self.net(torch.tensor(board).float().to(self.args['device']))
-            self.Ps[s], v = self.Ps[s].detach().squeeze().cpu().numpy(), v.detach().squeeze().cpu().numpy()
-            valids = np.array([1 if i in self.game.allowed_actions(board) else 0 for i in range(7) ])
-            self.Ps[s] = self.Ps[s] * valids      # masking invalid moves
-            sum_Ps_s = np.sum(self.Ps[s])
-            if sum_Ps_s > 0:
-                self.Ps[s] /= sum_Ps_s    # renormalize
-            else:
-                print("All valid moves were masked.")
-                # We choose uniformely a move among the valid moves.
-                self.Ps[s] += valids
-                self.Ps[s] /= np.sum(self.Ps[s])
-
-            self.Vs[s] = valids
-            self.Ns[s] = 0
-            return -v
- 
-        # Expend with UCT : otherwise, 
-
-        valids = self.Vs[s]
-        cur_best = -float('inf')
-        best_act = -1
-
-        # pick the action with the highest upper confidence bound
-        for a in range(7):
-            if valids[a]:
-                if (s,a) in self.Qsa:
-                    u = self.Qsa[(s,a)] + self.args['exploration_constant']*self.Ps[s][a]*np.sqrt(self.Ns[s])/(1+self.Nsa[(s,a)])
+            probs, value = self.net(torch.tensor(leaf.state).float().to(self.args['device']))
+            probs, value = probs.detach().squeeze().cpu().numpy(), value.detach().squeeze().cpu().numpy()
+            valid_actions = np.array([1 if i in self.game.allowed_actions(leaf.state) else 0 for i in range(7)])
+            # Masking invalid moves and normalize
+            probs = probs * valid_actions
+            probs = probs / np.sum(probs)
+            
+            # Expand the tree according to all possible actions
+            for i, a in enumerate(self.game.allowed_actions(leaf.state)):
+                next_state, next_turn = self.game.step(a, leaf.state, leaf.turn)
+                if str(next_state) not in self.tree.keys():
+                    node = Node(next_state, next_turn)
+                    self.tree[str(next_state)] = node
                 else:
-                    u = self.args['exploration_constant']*self.Ps[s][a]*np.sqrt(self.Ns[s] + epsilon)
+                    node = self.tree[str(next_state)]
+                
+                new_edge = Edge(leaf, node, probs[i], a)
+                leaf.edges.append(new_edge)
+        return value
 
-                if u > cur_best:
-                    cur_best = u
-                    best_act = a
+    def backup(self, leaf, value, branch):
+        leaf_turn = leaf.turn
+#        print("leaf turn", leaf_turn)
+        for edge in branch:
+            turn = edge.turn
+            if turn == leaf_turn:
+                sgn = 1
+            else:
+                sgn = -1
+                
+            edge.N += 1
+            edge.W += sgn * value
+            edge.Q = edge.W / edge.N
+    
+    def search(self):
+        # Select the branch
+        leaf, winner, branch = self.select_leaf()
+        # Evaluate and expand
+        value = self.expand_evaluate(leaf, winner)
+        # Back up the value in the branch
+        self.backup(leaf, value, branch)
+    
+    def get_action_probs(self, tau):
+        for _ in range(self.args['n_sim']):
+            self.search()
+        edges = self.root.edges
+        pi = [0.] * 7
+        values = [0.] * 7
+        for edge in edges:
+            if tau != 0.:
+                pi[edge.action] = edge.N ** (1/tau)
+            else:
+                pi[edge.action] = np.float(edge.N)
+            
+            values[edge.action] = edge.Q
+        pi = np.array(pi)
 
-        a = best_act
-        next_s, next_player = self.game.step(a, board, 1)
-        next_s = self.game.get_canonical_form(next_s, next_player)
-
-        v = self.search(next_s)
-
-        if (s,a) in self.Qsa:
-            self.Qsa[(s,a)] = (self.Nsa[(s,a)]*self.Qsa[(s,a)] + v)/(self.Nsa[(s,a)]+1)
-            self.Nsa[(s,a)] += 1
-
+        if np.sum(pi) != 0:
+            pi /= np.sum(pi)
         else:
-            self.Qsa[(s,a)] = v
-            self.Nsa[(s,a)] = 1
-
-        self.Ns[s] += 1
-        return -v
-
-
+            a = np.random.choice(self.game.get_allowed_actions(self.root.state))
+            pi[a] = 1
+        return pi, values
+    
+    def set_root(self, node):
+        if str(node) in self.tree.keys():
+            self.root = self.tree[str(node)]
+        else:
+            if node.sum() == 0:
+                turn = 1
+            else:
+                turn = -1
+            self.root = Node(node, turn)
+            self.tree[str(self.root)] = self.root
 
